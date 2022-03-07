@@ -1,6 +1,6 @@
 schema Address:
     address: str
-    operator: KeyAlias
+    operator: str
 
 schema NFT:
     id: Identifier
@@ -50,6 +50,15 @@ def burn(to: str, nft_id: Identifier) -> None:
     cvm.job_start()
     with PostTxArgs(PUBLIC):
         _burn(to, nft_id)
+
+@clientside
+def transfer(_from: str, to: str, nft_id: Identifier) -> None:
+    nft = cvm.storage.get(PUBLIC, NFTStatic, nft_id)
+    if isinstance(nft,  None):
+        cvm.error(f"NFT {nft_id} not found.")
+    cvm.job_start()
+    with PostTxArgs(PUBLIC):
+        _transfer(_from, to, nft_id)
 
 @helper
 def _get_creator(id: Identifier) -> Address:
@@ -106,4 +115,20 @@ def _burn(to: str, nft_id: Identifier) -> None:
     if count == 0:
         cvm.error(f"Cannot burn an NFT you dont own.")
     nft.balances[to] = count-1
+    cvm.storage.put(nft_id, nft)
+
+@executable
+def _transfer(_from: str, to: str, nft_id: Identifier) -> None:
+    nft = _get_nft(nft_id)
+    actor : str = cvm.tx.key_alias
+    if isinstance(nft,  None):
+        cvm.error(f"NFT {nft_id} not found.")
+    if nft.creator.operator != actor:
+        cvm.error(f"Action forbidden as not the operator of this NFT.")
+    from_count = nft.balances.get(_from, 0)
+    if from_count == 0:
+        cvm.error(f"Cannot transfer an NFT not owned by {from_count}.")
+    nft.balances[_from] = from_count-1
+    to_count = nft.balances.get(to, 0)
+    nft.balances[to] = to_count+1
     cvm.storage.put(nft_id, nft)

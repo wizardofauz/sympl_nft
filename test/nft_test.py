@@ -86,3 +86,20 @@ class TestNFT():
 
         retrieved_nft = nft.get_nft(id=new_nft['id'])
         assert json.loads(retrieved_nft['metadata'])['hello'] == 'world'
+
+    def test_nft_transfer(self, nft):
+        bob_address = 'eth://sendmemoney'
+        alice_address = 'algo://thisisanalgowallet'
+        new_nft = nft.create_nft(name='SymNyan v4'
+                                , symbol='~=[,,,,,_,,,,,]:3'
+                                , owner_address= alice_address
+                                , max_mint=None
+                                , metadata='{"hello": "world"}')
+
+        retrieved_nft = nft.get_nft(id=new_nft['id'])
+        assert retrieved_nft['balances'][alice_address] == '1'
+
+        nft.transfer(_from=alice_address, to=bob_address, nft_id=new_nft['id'])
+        reretrieved_nft = nft.get_nft(id=new_nft['id'])
+        assert reretrieved_nft['balances'][alice_address] == '0'
+        assert reretrieved_nft['balances'][bob_address] == '1'

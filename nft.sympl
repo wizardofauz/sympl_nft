@@ -8,6 +8,8 @@ schema NFT:
     symbol: str
     creator: Address
     balances: Dict[int]
+    max_mint: Optional[int]
+    mint_count: int
 
 # Returns all the nfts in our storage
 @clientside
@@ -25,12 +27,12 @@ def get_nft(id: Identifier) -> Optional[NFT]:
 
 # Create an nft.
 @clientside
-def create_nft(name: str, symbol: str, owner_address: str) -> None:
+def create_nft(name: str, symbol: str, owner_address: str, max_mint: Optional[int]) -> None:
     cvm.job_start()
     address = Address(address = owner_address
                      , operator = cvm.tx.key_alias)
     with PostTxArgs(PUBLIC):
-        _create_nft(name, symbol, address)
+        _create_nft(name, symbol, address, max_mint)
 
 @clientside
 def creator_of(id: Identifier) -> Address:
@@ -62,13 +64,15 @@ def _get_nft(id: Identifier) -> Optional[NFT]:
 
 # Executable to create an nft.
 @executable
-def _create_nft(name: str, symbol: str, owner_address: Address) -> None:
+def _create_nft(name: str, symbol: str, owner_address: Address, max_mint: Optional[int]) -> None:
     id = cvm.generate_id('NFT')
     nft = NFT(id = id
              , name = name
              , symbol = symbol
              , creator = owner_address
-             , balances = { owner_address.address: 1 })
+             , balances = { owner_address.address: 1 }
+             , max_mint = max_mint
+             , mint_count = 1)
     cvm.storage.put(id, nft)
     cvm.job_complete(std.json(nft))
 
@@ -77,8 +81,14 @@ def _mint(to: str, nft_id: Identifier) -> None:
     nft = _get_nft(nft_id)
     if isinstance(nft,  None):
         cvm.error(f"NFT {nft_id} not found.")
+    # This syntax feels very wrong
+    if maybe@[int](0, nft.max_mint) > 0:
+        max = nft.max_mint
+        if maybe@[int](0, max) <= nft.mint_count:
+            cvm.error(f"NFT {nft_id} is no longer mintable.")
     count = nft.balances.get(to, 0)
     nft.balances[to] = count+1
+    nft.mint_count = nft.mint_count+1
     cvm.storage.put(nft_id, nft)
 
 @executable

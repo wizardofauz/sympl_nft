@@ -10,6 +10,7 @@ schema NFT:
     balances: Dict[int]
     max_mint: Optional[int]
     mint_count: int
+    metadata: str
 
 # Returns all the nfts in our storage
 @clientside
@@ -27,12 +28,12 @@ def get_nft(id: Identifier) -> Optional[NFT]:
 
 # Create an nft.
 @clientside
-def create_nft(name: str, symbol: str, owner_address: str, max_mint: Optional[int]) -> None:
+def create_nft(name: str, symbol: str, owner_address: str, max_mint: Optional[int], metadata: str) -> None:
     cvm.job_start()
     address = Address(address = owner_address
                      , operator = cvm.tx.key_alias)
     with PostTxArgs(PUBLIC):
-        _create_nft(name, symbol, address, max_mint)
+        _create_nft(name, symbol, address, max_mint, metadata)
 
 @clientside
 def creator_of(id: Identifier) -> Address:
@@ -64,7 +65,7 @@ def _get_nft(id: Identifier) -> Optional[NFT]:
 
 # Executable to create an nft.
 @executable
-def _create_nft(name: str, symbol: str, owner_address: Address, max_mint: Optional[int]) -> None:
+def _create_nft(name: str, symbol: str, owner_address: Address, max_mint: Optional[int], metadata: str) -> None:
     id = cvm.generate_id('NFT')
     nft = NFT(id = id
              , name = name
@@ -72,7 +73,8 @@ def _create_nft(name: str, symbol: str, owner_address: Address, max_mint: Option
              , creator = owner_address
              , balances = { owner_address.address: 1 }
              , max_mint = max_mint
-             , mint_count = 1)
+             , mint_count = 1
+             , metadata = metadata)
     cvm.storage.put(id, nft)
     cvm.job_complete(std.json(nft))
 
@@ -86,6 +88,10 @@ def _mint(to: str, nft_id: Identifier) -> None:
         max = nft.max_mint
         if maybe@[int](0, max) <= nft.mint_count:
             cvm.error(f"NFT {nft_id} is no longer mintable.")
+    # Should this work?
+    # if not isinstance(nft.max_mint, None):
+    #     if nft.max_mint <= nft.mint_count:
+    #           cvm.error(f"NFT {nft_id} is no longer mintable.")
     count = nft.balances.get(to, 0)
     nft.balances[to] = count+1
     nft.mint_count = nft.mint_count+1

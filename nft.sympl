@@ -1,0 +1,93 @@
+schema Address:
+    address: str
+    operator: KeyAlias
+
+schema NFT:
+    id: Identifier
+    name: str
+    symbol: str
+    creator: Address
+    balances: Dict[int]
+
+# Returns all the nfts in our storage
+@clientside
+def get_nfts() -> List[NFT]:
+    return _get_nfts()
+
+@helper
+def _get_nfts() -> List[NFT]:
+    return [row.value for row in cvm.storage.query(NFTStatic).execute() ]
+
+# Returns a specific NFT (if it exists)
+@clientside
+def get_nft(id: Identifier) -> Optional[NFT]:
+    return cvm.storage.get(PUBLIC, NFTStatic, id)
+
+# Create an nft.
+@clientside
+def create_nft(name: str, symbol: str, owner_address: str) -> None:
+    cvm.job_start()
+    address = Address(address = owner_address
+                     , operator = cvm.tx.key_alias)
+    with PostTxArgs(PUBLIC):
+        _create_nft(name, symbol, address)
+
+@clientside
+def creator_of(id: Identifier) -> Address:
+    return _get_creator(id)
+
+@clientside
+def mint(to: str, nft_id: Identifier) -> None:
+    cvm.job_start()
+    with PostTxArgs(PUBLIC):
+        _mint(to, nft_id)
+
+@clientside
+def burn(to: str, nft_id: Identifier) -> None:
+    cvm.job_start()
+    with PostTxArgs(PUBLIC):
+        _burn(to, nft_id)
+
+@helper
+def _get_creator(id: Identifier) -> Address:
+    nft = cvm.storage.get(PUBLIC, NFTStatic, id)
+    if isinstance(nft,  None):
+        cvm.error(f"NFT {id} not found.")
+    return nft.creator
+
+@helper
+def _get_nft(id: Identifier) -> Optional[NFT]:
+    nft = cvm.storage.get(PUBLIC, NFTStatic, id)
+    return nft
+
+# Executable to create an nft.
+@executable
+def _create_nft(name: str, symbol: str, owner_address: Address) -> None:
+    id = cvm.generate_id('NFT')
+    nft = NFT(id = id
+             , name = name
+             , symbol = symbol
+             , creator = owner_address
+             , balances = { owner_address.address: 1 })
+    cvm.storage.put(id, nft)
+    cvm.job_complete(std.json(nft))
+
+@executable
+def _mint(to: str, nft_id: Identifier) -> None:
+    nft = _get_nft(nft_id)
+    if isinstance(nft,  None):
+        cvm.error(f"NFT {nft_id} not found.")
+    count = nft.balances.get(to, 0)
+    nft.balances[to] = count+1
+    cvm.storage.put(nft_id, nft)
+
+@executable
+def _burn(to: str, nft_id: Identifier) -> None:
+    nft = _get_nft(nft_id)
+    if isinstance(nft,  None):
+        cvm.error(f"NFT {nft_id} not found.")
+    count = nft.balances.get(to, 0)
+    if count == 0:
+        cvm.error(f"Cannot burn an NFT you dont own.")
+    nft.balances[to] = count-1
+    cvm.storage.put(nft_id, nft)
